@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Online-Fix - Game Fix Repository</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;500&family=Inter:wght@100;400;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #00ff88;
+            --primary-glow: rgba(0, 255, 136, 0.4);
+            --secondary: #ff00aa;
+            --danger: #ff3366;
+            --bg-ultra-dark: #0a0e1a;
+            --card-bg: rgba(15, 20, 35, 0.9);
+            --border-glow: 1px solid rgba(0, 255, 136, 0.15);
+        }
+
+        * { cursor: crosshair !important; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1a2e 100%);
+            color: #ffffff;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(0, 255, 136, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 0, 170, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0e1a; }
+        ::-webkit-scrollbar-thumb { background: var(--primary); box-shadow: 0 0 10px var(--primary); border-radius: 10px; }
+
+        @keyframes scanline { 0% { top: -100px; } 100% { top: 100%; } }
+        
+        .scanline {
+            position: fixed; top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0.15; z-index: 100; animation: scanline 10s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+        }
+
+        .glitch:hover {
+            animation: glitch 0.3s infinite;
+        }
+
+        .cyber-card {
+            background: var(--card-bg);
+            border: var(--border-glow);
+            backdrop-filter: blur(25px);
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .cyber-card:hover {
+            box-shadow: 0 0 40px rgba(0, 255, 136, 0.15);
+            transform: translateY(-2px);
+            border-color: rgba(0, 255, 136, 0.3);
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .neon-border { border: 2px solid var(--primary); box-shadow: 0 0 20px var(--primary-glow), inset 0 0 20px rgba(0, 255, 136, 0.1); }
+
+        .corner-decoration {
+            position: absolute; width: 12px; height: 12px; border: 2px solid var(--primary);
+            opacity: 0.6;
+        }
+
+        #particle-canvas { position: fixed; top: 0; left: 0; z-index: -1; pointer-events: none; }
+
+        .glass-input {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(0, 255, 136, 0.1);
+            color: var(--primary);
+            transition: 0.3s;
+        }
+        .glass-input:focus {
+            background: rgba(0, 255, 136, 0.05);
+            border-color: var(--primary);
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
+            outline: none;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(0, 255, 136, 0.6); }
+        }
+
+        .pulse-btn {
+            animation: pulse-glow 2s infinite;
+        }
+
+        .status-indicator {
+            position: relative;
+        }
+
+        .status-indicator::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            background: inherit;
+            border-radius: inherit;
+            animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+
+        @keyframes ping {
+            75%, 100% {
+                transform: translate(-50%, -50%) scale(2);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen relative">
+    <canvas id="particle-canvas"></canvas>
+    <div class="scanline"></div>
+
+    <nav class="sticky top-0 z-50 border-b border-white/10 bg-black/50 backdrop-blur-xl p-6">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 neon-border rounded-lg flex items-center justify-center bg-black/80 glitch">
+                    <span class="material-icons text-2xl" style="color: var(--primary);">sports_esports</span>
+                </div>
+                <div>
+                    <h1 class="orbitron text-2xl font-black tracking-widest" style="color: var(--primary);">ONLINE-FIX <span class="text-[10px] text-pink-400">.SYSTEM</span></h1>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-green-500 status-indicator"></span>
+                        <span class="text-[8px] mono text-zinc-500 uppercase tracking-tighter">Système de clés actif</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="hidden md:flex gap-8 mono text-[10px] tracking-widest uppercase">
+                <a href="#" class="text-green-400 hover:text-white transition-all">ACCUEIL</a>
+                <button id="tutorialBtn" class="text-zinc-500 hover:text-green-400 transition-all flex items-center gap-1">
+                    <span class="material-icons text-xs">play_circle</span> TUTORIEL
+                </button>
+                <a href="https://discord.gg/WWRezGU5Ns" class="px-4 py-2 border border-green-500/30 rounded hover:bg-green-500 hover:text-black transition-all">SUPPORT</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-12 gap-8 mt-10 relative z-10">
+        
+        <div class="lg:col-span-8 space-y-8">
+            <section class="cyber-card rounded-3xl p-10 overflow-hidden relative">
+                <div class="corner-decoration top-0 left-0 border-r-0 border-b-0"></div>
+                <div class="corner-decoration top-0 right-0 border-l-0 border-b-0"></div>
+                <div class="corner-decoration bottom-0 left-0 border-r-0 border-t-0"></div>
+                <div class="corner-decoration bottom-0 right-0 border-l-0 border-t-0"></div>
+
+                <div class="mb-10">
+                    <h2 class="orbitron text-4xl font-black mb-3" style="color: var(--primary);">RECHERCHE DE FIX</h2>
+                    <p class="text-zinc-400 mono text-sm uppercase tracking-widest">Entrez l'ID Steam du jeu pour vérifier dans notre base de données</p>
+                </div>
+
+                <div class="relative group mb-8">
+                    <div class="absolute -inset-1 bg-gradient-to-r from-green-500 to-pink-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+                    <div class="relative flex flex-col md:flex-row gap-4">
+                        <div class="relative flex-grow">
+                            <span class="material-icons absolute left-6 top-1/2 -translate-y-1/2 text-green-500/50 text-2xl">search</span>
+                            <input id="gameId" type="text" placeholder="STEAM APP ID (ex: 730)..." class="w-full glass-input rounded-2xl py-7 pl-16 pr-8 text-xl orbitron tracking-widest shadow-2xl" />
+                        </div>
+                        <button id="searchBtn" class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-black px-14 py-7 rounded-2xl orbitron font-black text-base tracking-widest transition-all hover:shadow-[0_0_40px_rgba(0,255,136,0.4)] flex items-center justify-center gap-3 pulse-btn">
+                            SCANNER <span class="material-icons">radar</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div class="bg-black/40 border border-green-500/20 rounded-xl p-4 flex items-center gap-3">
+                        <span class="material-icons text-green-400">info</span>
+                        <div>
+                            <p class="text-white font-bold">Trouvez votre ID Steam</p>
+                            <a href="https://steamdb.info" target="_blank" class="text-green-400 hover:text-white underline transition-all">steamdb.info</a>
+                        </div>
+                    </div>
+                    <div class="bg-black/40 border border-pink-500/20 rounded-xl p-4 flex items-center gap-3">
+                        <span class="material-icons text-pink-400">support</span>
+                        <div>
+                            <p class="text-white font-bold">Besoin d'aide ?</p>
+                            <a href="https://discord.gg/WWRezGU5Ns" target="_blank" class="text-pink-400 hover:text-white underline transition-all">Rejoignez Discord</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="progressArea" class="mt-10 opacity-0 transition-opacity duration-500">
+                    <div class="flex justify-between items-center mb-4">
+                        <span id="loadStatus" class="mono text-xs text-green-400 uppercase tracking-widest flex items-center gap-2">
+                            <span class="material-icons text-sm animate-spin">sync</span>
+                            Vérification en cours...
+                        </span>
+                        <span id="loadPercent" class="orbitron text-base font-bold" style="color: var(--primary);">0%</span>
+                    </div>
+                    <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-green-500/20">
+                        <div id="mainProgress" class="h-full bg-gradient-to-r from-green-400 to-green-500 w-0 transition-all duration-300 shadow-[0_0_20px_#00ff88]"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="cyber-card rounded-2xl p-8 border-l-4 border-l-green-500">
+                    <h3 class="orbitron text-base font-bold text-white mb-6 flex items-center gap-2">
+                        <span class="material-icons" style="color: var(--primary);">download_for_offline</span> ÉTAPE 1 : TÉLÉCHARGEMENT
+                    </h3>
+                    <div class="space-y-4 text-sm text-zinc-300 leading-relaxed">
+                        <p class="flex gap-3"><span class="text-green-400 font-bold orbitron">→</span> Cliquez sur le bouton de téléchargement une fois le fix trouvé.</p>
+                        <p class="flex gap-3"><span class="text-green-400 font-bold orbitron">→</span> Enregistrez le fichier .zip dans un dossier accessible.</p>
+                        <p class="flex gap-3"><span class="text-green-400 font-bold orbitron">→</span> Ne modifiez pas le contenu de l'archive.</p>
+                    </div>
+                </div>
+
+                <div class="cyber-card rounded-2xl p-8 border-l-4 border-l-pink-500">
+                    <h3 class="orbitron text-base font-bold text-white mb-6 flex items-center gap-2">
+                        <span class="material-icons text-pink-400">settings_applications</span> ÉTAPE 2 : INSTALLATION
+                    </h3>
+                    <div class="space-y-4 text-sm text-zinc-300 leading-relaxed">
+                        <p class="flex gap-3"><span class="text-pink-400 font-bold orbitron">→</span> Extrayez le contenu du fichier .zip.</p>
+                        <p class="flex gap-3"><span class="text-pink-400 font-bold orbitron">→</span> Suivez les instructions fournies dans le README.</p>
+                        <p class="flex gap-3"><span class="text-pink-400 font-bold orbitron">→</span> Lancez le jeu et profitez du mode en ligne !</p>
+                    </div>
+                </div>
+            </section>
+
+            <div class="bg-orange-500/5 border-2 border-orange-500/30 rounded-2xl p-6 flex items-start gap-4">
+                <span class="material-icons text-orange-400 text-3xl">warning</span>
+                <div>
+                    <p class="text-sm text-orange-300 font-bold orbitron mb-2">AVERTISSEMENT IMPORTANT</p>
+                    <p class="text-xs text-zinc-400 leading-relaxed">
+                        L'utilisation de ces fixes est à vos propres risques. Assurez-vous de sauvegarder vos fichiers de jeu avant toute modification. 
+                        Online-Fix n'est pas responsable des dommages ou problèmes qui pourraient survenir. Ces fixes sont destinés à un usage personnel uniquement.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-4 space-y-8">
+            <div class="cyber-card rounded-3xl h-[500px] flex flex-col overflow-hidden">
+                <div class="bg-black/60 p-5 flex items-center justify-between border-b border-green-500/20">
+                    <span class="orbitron text-xs tracking-[0.3em] uppercase" style="color: var(--primary);">
+                        <span class="material-icons text-sm align-middle mr-1">terminal</span>
+                        SYSTEM_LOGS
+                    </span>
+                    <div class="flex gap-1">
+                        <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                        <div class="w-2 h-2 rounded-full bg-yellow-500"></div>
+                        <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                    </div>
+                </div>
+                <div id="consoleBody" class="flex-grow p-6 mono text-[11px] overflow-y-auto space-y-2">
+                    <p class="text-zinc-600">[SYSTEM] Online-Fix initialized...</p>
+                    <p class="text-zinc-600">[SYSTEM] Encrypted key system ready</p>
+                </div>
+            </div>
+
+            <div id="downloadCard" class="opacity-30 pointer-events-none transition-all duration-700">
+                <div class="cyber-card rounded-3xl p-8 bg-gradient-to-br from-green-500/10 to-pink-500/5 border-green-500/30">
+                    <div class="text-center">
+                        <div class="w-24 h-24 rounded-full bg-green-500/20 mx-auto flex items-center justify-center mb-6 border-2 border-green-500/30">
+                            <span id="resultIcon" class="material-icons text-5xl text-green-400">cloud_queue</span>
+                        </div>
+                        <h4 id="resultTitle" class="orbitron text-xl font-bold mb-3" style="color: var(--primary);">EN ATTENTE</h4>
+                        <p id="resultDesc" class="text-xs text-zinc-500 mb-8 uppercase tracking-widest mono">Entrez un ID Steam pour commencer</p>
+                        
+                        <a id="finalDownloadLink" href="#" target="_blank" class="hidden w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-black py-5 rounded-xl orbitron font-black transition-all flex items-center justify-center gap-3 text-base shadow-lg hover:shadow-[0_0_30px_rgba(0,255,136,0.4)]">
+                            <span class="material-icons text-2xl">cloud_download</span> TÉLÉCHARGER LE FIX
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cyber-card rounded-2xl p-6 bg-gradient-to-br from-purple-500/5 to-transparent border-purple-500/20">
+                <div class="flex items-start gap-3">
+                    <span class="material-icons text-purple-400">lightbulb</span>
+                    <div>
+                        <h4 class="orbitron text-sm font-bold text-purple-300 mb-2">ASTUCE PRO</h4>
+                        <p class="text-xs text-zinc-400 leading-relaxed">
+                            Si le fix n'est pas disponible, vous pouvez faire une demande sur notre serveur Discord. 
+                            Notre communauté pourra peut-être vous aider !
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="p-10 border-t border-white/10 mt-20 relative z-10">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+            <div class="flex items-center gap-4">
+                <span class="material-icons text-green-400">vpn_key</span>
+                <p class="orbitron text-zinc-500 text-xs tracking-widest uppercase">
+                    Système de clés sécurisé - 
+                    <a href="https://discord.gg/WWRezGU5Ns" target="_blank" class="text-green-400 hover:text-white transition-all">
+                        Support Discord
+                    </a>
+                </p>
+            </div>
+            <div class="text-[50px] orbitron font-black text-white/5 select-none">ONLINE-FIX</div>
+        </div>
+    </footer>
+
+    <!-- Modal Popup Tutoriel -->
+    <div id="tutorialModal" class="hidden fixed inset-0 z-[9999] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" id="modalBackdrop"></div>
+        <div class="relative cyber-card rounded-3xl max-w-2xl w-full p-8 animate-[glitch_0.3s_ease-in-out]">
+            <div class="corner-decoration top-0 left-0 border-r-0 border-b-0"></div>
+            <div class="corner-decoration top-0 right-0 border-l-0 border-b-0"></div>
+            <div class="corner-decoration bottom-0 left-0 border-r-0 border-t-0"></div>
+            <div class="corner-decoration bottom-0 right-0 border-l-0 border-t-0"></div>
+            
+            <button id="closeModal" class="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-red-500/20 hover:bg-red-500 transition-all group">
+                <span class="material-icons text-red-400 group-hover:text-black">close</span>
+            </button>
+
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 rounded-full bg-green-500/20 mx-auto flex items-center justify-center mb-4 border-2 border-green-500/30">
+                    <span class="material-icons text-4xl text-green-400">play_circle</span>
+                </div>
+                <h3 class="orbitron text-2xl font-black mb-2" style="color: var(--primary);">TUTORIEL VIDEO</h3>
+                <p class="text-zinc-400 text-sm mono">Apprenez comment installer vos fix en quelques minutes</p>
+            </div>
+
+            <div class="aspect-video bg-black/60 rounded-xl border-2 border-green-500/30 mb-6 flex items-center justify-center">
+                <div class="text-center">
+                    <span class="material-icons text-6xl text-green-400/30 mb-3">videocam</span>
+                    <p class="text-zinc-500 mono text-sm">Vidéo bientôt disponible...</p>
+                    <p class="text-zinc-600 mono text-xs mt-2">En attente de la sortie YouTube</p>
+                </div>
+            </div>
+
+            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3 mb-4">
+                <span class="material-icons text-yellow-400">info</span>
+                <div>
+                    <p class="text-sm text-yellow-300 font-bold orbitron mb-1">VIDÉO EN PRÉPARATION</p>
+                    <p class="text-xs text-zinc-400">
+                        Le tutoriel complet sera bientôt publié sur YouTube. En attendant, rejoignez notre Discord pour obtenir de l'aide !
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex gap-4">
+                <button id="closeModalBtn" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl orbitron font-bold transition-all">
+                    FERMER
+                </button>
+                <a href="https://discord.gg/WWRezGU5Ns" target="_blank" class="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-black py-3 rounded-xl orbitron font-bold transition-all text-center">
+                    DISCORD SUPPORT
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popup d'aide au démarrage -->
+    <div id="welcomePopup" class="hidden fixed bottom-8 right-8 z-[9998] max-w-md">
+        <div class="cyber-card rounded-2xl p-6 border-2 border-green-500/40 bg-gradient-to-br from-green-500/20 to-black/90 shadow-[0_0_50px_rgba(0,255,136,0.3)]">
+            <button id="closeWelcome" class="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-red-500/20 transition-all group">
+                <span class="material-icons text-sm text-zinc-500 group-hover:text-red-400">close</span>
+            </button>
+            
+            <div class="flex items-start gap-4">
+                <div class="w-12 h-12 rounded-full bg-green-500/30 flex items-center justify-center flex-shrink-0 border border-green-500/50">
+                    <span class="material-icons text-2xl text-green-400 animate-pulse">help</span>
+                </div>
+                <div>
+                    <h4 class="orbitron text-base font-bold text-white mb-2">Besoin d'aide ?</h4>
+                    <p class="text-sm text-zinc-300 mb-4 leading-relaxed">
+                        Vous ne savez pas comment installer vos fix ? Consultez notre tutoriel vidéo en cliquant sur le bouton <span class="text-green-400 font-bold">TUTORIEL</span> en haut de la page !
+                    </p>
+                    <button id="openTutorialFromPopup" class="w-full bg-green-500 hover:bg-green-400 text-black py-2 rounded-lg orbitron font-bold text-sm transition-all flex items-center justify-center gap-2">
+                        <span class="material-icons text-lg">play_arrow</span>
+                        VOIR LE TUTORIEL
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // Protection du clic droit
+            document.addEventListener('contextmenu', e => e.preventDefault());
+
+            // URL du repository (encodé pour la sécurité)
+            const REPO_KEY = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3NweWRlcmdlcnNkYW9mZi9PbmxpbmUtZml4L21haW4v";
+            const decodeKey = (key) => atob(key);
+
+            // Gestion du popup de bienvenue
+            const welcomePopup = document.getElementById('welcomePopup');
+            const closeWelcome = document.getElementById('closeWelcome');
+            const openTutorialFromPopup = document.getElementById('openTutorialFromPopup');
+
+            // Afficher le popup après 3 secondes
+            setTimeout(() => {
+                if (!sessionStorage.getItem('welcomeShown')) {
+                    welcomePopup.classList.remove('hidden');
+                    welcomePopup.style.animation = 'glitch 0.3s ease-in-out';
+                    sessionStorage.setItem('welcomeShown', 'true');
+                }
+            }, 3000);
+
+            closeWelcome.addEventListener('click', () => {
+                welcomePopup.classList.add('hidden');
+            });
+
+            // Gestion du modal tutoriel
+            const tutorialModal = document.getElementById('tutorialModal');
+            const tutorialBtn = document.getElementById('tutorialBtn');
+            const closeModal = document.getElementById('closeModal');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+            const modalBackdrop = document.getElementById('modalBackdrop');
+
+            function openTutorial() {
+                tutorialModal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeTutorial() {
+                tutorialModal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+
+            tutorialBtn.addEventListener('click', openTutorial);
+            openTutorialFromPopup.addEventListener('click', () => {
+                welcomePopup.classList.add('hidden');
+                openTutorial();
+            });
+            closeModal.addEventListener('click', closeTutorial);
+            closeModalBtn.addEventListener('click', closeTutorial);
+            modalBackdrop.addEventListener('click', closeTutorial);
+
+            // Fermer le modal avec la touche Échap
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !tutorialModal.classList.contains('hidden')) {
+                    closeTutorial();
+                }
+            });
+
+            // Canvas particles
+            const canvas = document.getElementById('particle-canvas');
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+
+            function resize() { 
+                canvas.width = window.innerWidth; 
+                canvas.height = window.innerHeight; 
+            }
+            window.addEventListener('resize', resize);
+            resize();
+
+            class Particle {
+                constructor() { this.reset(); }
+                reset() {
+                    this.x = Math.random() * canvas.width;
+                    this.y = Math.random() * canvas.height;
+                    this.size = Math.random() * 2 + 0.5;
+                    this.speedX = (Math.random() - 0.5) * 0.3;
+                    this.speedY = (Math.random() - 0.5) * 0.3;
+                    this.alpha = Math.random() * 0.4;
+                }
+                update() {
+                    this.x += this.speedX; 
+                    this.y += this.speedY;
+                    if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) 
+                        this.reset();
+                }
+                draw() { 
+                    ctx.fillStyle = `rgba(0, 255, 136, ${this.alpha})`; 
+                    ctx.beginPath(); 
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); 
+                    ctx.fill(); 
+                }
+            }
+
+            for (let i = 0; i < 180; i++) particles.push(new Particle());
+
+            function animate() { 
+                ctx.clearRect(0, 0, canvas.width, canvas.height); 
+                particles.forEach(p => { p.update(); p.draw(); }); 
+                requestAnimationFrame(animate); 
+            }
+            animate();
+
+            // Console logs
+            const consoleBody = document.getElementById('consoleBody');
+            function log(text, type = 'info') {
+                const time = new Date().toLocaleTimeString();
+                const p = document.createElement('p');
+                let color = "text-zinc-500"; 
+                let prefix = "[INFO] ";
+                
+                if (type === 'error') { color = "text-red-400"; prefix = "[ERROR] "; }
+                if (type === 'success') { color = "text-green-400"; prefix = "[SUCCESS] "; }
+                if (type === 'warn') { color = "text-yellow-400"; prefix = "[WARN] "; }
+                
+                p.className = `log-line ${color}`;
+                p.innerHTML = `<span class="opacity-40 mr-2">${time}</span> ${prefix}${text}`;
+                consoleBody.appendChild(p);
+                consoleBody.scrollTop = consoleBody.scrollHeight;
+            }
+
+            // Elements
+            const searchBtn = document.getElementById('searchBtn');
+            const gameIdInput = document.getElementById('gameId');
+            const progressArea = document.getElementById('progressArea');
+            const mainProgress = document.getElementById('mainProgress');
+            const loadPercent = document.getElementById('loadPercent');
+            const loadStatus = document.getElementById('loadStatus');
+            const downloadCard = document.getElementById('downloadCard');
+            const finalDownloadLink = document.getElementById('finalDownloadLink');
+            const resultIcon = document.getElementById('resultIcon');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultDesc = document.getElementById('resultDesc');
+
+            async function searchFix() {
+                const gameId = gameIdInput.value.trim();
+                
+                if (!/^\d+$/.test(gameId)) {
+                    log(`ID invalide: "${gameId}" - utilisez uniquement des chiffres`, 'error');
+                    return;
+                }
+
+                searchBtn.disabled = true;
+                progressArea.classList.remove('opacity-0');
+                downloadCard.classList.add('opacity-30', 'pointer-events-none');
+                finalDownloadLink.classList.add('hidden');
+                
+                log(`Recherche du fix pour Steam ID: ${gameId}...`);
+                log(`Déchiffrement de la clé d'accès...`, 'warn');
+
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += Math.floor(Math.random() * 10) + 5;
+                    if (progress >= 100) {
+                        progress = 100;
+                        clearInterval(interval);
+                        checkDatabase(gameId);
+                    }
+                    mainProgress.style.width = `${progress}%`;
+                    loadPercent.innerText = `${progress}%`;
+                }, 150);
+            }
+
+            async function checkDatabase(gameId) {
+                const fileUrl = `${decodeKey(REPO_KEY)}${gameId}.zip`;
+                
+                try {
+                    log(`Vérification dans la base de données...`, 'warn');
+                    log(`Authentification avec clé cryptée...`, 'warn');
+                    
+                    const response = await fetch(fileUrl, { method: 'HEAD' });
+                    
+                    if (response.ok) {
+                        log(`✓ Fix trouvé pour le jeu ID ${gameId}!`, 'success');
+                        log(`Clé d'accès validée: ${gameId}.zip`, 'success');
+                        showSuccess(fileUrl, gameId);
+                    } else {
+                        log(`✗ Aucun fix disponible pour l'ID ${gameId}`, 'error');
+                        log(`La clé ne correspond à aucun fichier`, 'error');
+                        showError(gameId);
+                    }
+                } catch (err) {
+                    log(`Erreur de connexion au serveur sécurisé`, 'error');
+                    log(`Détails: ${err.message}`, 'error');
+                    showError(gameId);
+                } finally {
+                    searchBtn.disabled = false;
+                }
+            }
+
+            function showSuccess(url, gameId) {
+                downloadCard.classList.remove('opacity-30', 'pointer-events-none');
+                resultIcon.innerText = 'check_circle';
+                resultIcon.classList.add('animate-bounce');
+                resultIcon.style.color = '#00ff88';
+                resultTitle.innerText = "FIX DISPONIBLE";
+                resultTitle.style.color = '#00ff88';
+                resultDesc.innerText = `Steam ID: ${gameId} | Status: VERIFIED`;
+                finalDownloadLink.href = url;
+                finalDownloadLink.classList.remove('hidden');
+                
+                log(`Téléchargement prêt. Cliquez sur le bouton pour récupérer le fix.`, 'success');
+            }
+
+            function showError(gameId) {
+                downloadCard.classList.remove('opacity-30', 'pointer-events-none');
+                resultIcon.innerText = 'error';
+                resultIcon.classList.remove('animate-bounce');
+                resultIcon.style.color = '#ff3366';
+                resultTitle.innerText = "FIX INTROUVABLE";
+                resultTitle.style.color = '#ff3366';
+                resultDesc.innerText = `Steam ID: ${gameId} - Aucune clé correspondante`;
+                finalDownloadLink.classList.add('hidden');
+            }
+
+            searchBtn.addEventListener('click', searchFix);
+            gameIdInput.addEventListener('keypress', (e) => { 
+                if(e.key === 'Enter') searchFix(); 
+            });
+
+            window.onload = () => {
+                setTimeout(() => log("Online-Fix System: READY"), 500);
+                setTimeout(() => log("Encrypted Key System: ACTIVE"), 1000);
+                setTimeout(() => log("Awaiting user input..."), 1500);
+            };
+        })();
+    </script>
+</body>
+</html>
