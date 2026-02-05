@@ -597,7 +597,7 @@
             closeGamesList.addEventListener('click', closeGamesListModal);
             gamesModalBackdrop.addEventListener('click', closeGamesListModal);
 
-            // Récupérer les infos d'un jeu depuis l'API Steam avec proxy CORS
+            // Récupérer les infos d'un jeu depuis l'API Steam - VERSION RAPIDE AVEC IMAGES
             async function getSteamGameInfo(appId) {
                 if (steamGamesCache[appId]) {
                     return steamGamesCache[appId];
@@ -606,10 +606,16 @@
                 let gameName = null;
                 let gameImage = null;
 
-                // Tentative 1: API Steam avec proxy CORS (corsproxy.io)
+                // Utiliser l'API Steam officielle avec proxy CORS rapide
                 try {
-                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://store.steampowered.com/api/appdetails?appids=${appId}&l=french`)}`;
-                    const response = await fetch(proxyUrl);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 secondes max
+                    
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://store.steampowered.com/api/appdetails?appids=${appId}`)}`;
+                    const response = await fetch(proxyUrl, { signal: controller.signal });
+                    
+                    clearTimeout(timeoutId);
+                    
                     const data = await response.json();
                     
                     if (data[appId] && data[appId].success && data[appId].data) {
@@ -617,73 +623,17 @@
                         gameImage = data[appId].data.header_image;
                     }
                 } catch (error) {
-                    console.log(`Proxy 1 échoué pour ${appId}:`, error);
+                    console.log(`Steam API timeout pour ${appId}`);
                 }
 
-                // Tentative 2: Alternative avec allorigins
-                if (!gameName) {
-                    try {
-                        const altProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://store.steampowered.com/api/appdetails?appids=${appId}`)}`;
-                        const response = await fetch(altProxyUrl);
-                        const wrapper = await response.json();
-                        const data = JSON.parse(wrapper.contents);
-                        
-                        if (data[appId] && data[appId].success && data[appId].data) {
-                            gameName = data[appId].data.name;
-                            gameImage = data[appId].data.header_image;
-                        }
-                    } catch (error) {
-                        console.log(`Proxy 2 échoué pour ${appId}:`, error);
-                    }
-                }
-
-                // Tentative 3: SteamSpy API (pas de CORS)
-                if (!gameName) {
-                    try {
-                        const steamSpyUrl = `https://steamspy.com/api.php?request=appdetails&appid=${appId}`;
-                        const response = await fetch(steamSpyUrl);
-                        const data = await response.json();
-                        
-                        if (data && data.name && data.name !== '') {
-                            gameName = data.name;
-                        }
-                    } catch (error) {
-                        console.log(`SteamSpy échoué pour ${appId}:`, error);
-                    }
-                }
-
-                // Tentative 4: Essayer de scraper la page Steam directement
-                if (!gameName) {
-                    try {
-                        const pageProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://store.steampowered.com/app/${appId}`)}`;
-                        const response = await fetch(pageProxyUrl);
-                        const wrapper = await response.json();
-                        const html = wrapper.contents;
-                        
-                        // Extraire le titre de la page
-                        const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
-                        if (titleMatch && titleMatch[1]) {
-                            let title = titleMatch[1].trim();
-                            // Nettoyer le titre (enlever " on Steam" etc.)
-                            title = title.replace(/ on Steam$/i, '').replace(/Save \d+% on /i, '');
-                            if (title && title !== 'Welcome to Steam') {
-                                gameName = title;
-                            }
-                        }
-                    } catch (error) {
-                        console.log(`Scraping échoué pour ${appId}:`, error);
-                    }
-                }
-
-                // Définir l'image par défaut
+                // Image par défaut si pas trouvée
                 if (!gameImage) {
                     gameImage = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`;
                 }
 
-                // Si toujours pas de nom après toutes les tentatives
+                // Nom par défaut si pas trouvé
                 if (!gameName) {
-                    gameName = `Unknown Game ${appId}`;
-                    log(`⚠ Impossible de récupérer le nom pour ${appId} - utilisation du fallback`, 'warn');
+                    gameName = `Game ${appId}`;
                 }
 
                 const gameData = {
