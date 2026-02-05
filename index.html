@@ -741,17 +741,16 @@
                         return;
                     }
 
-                    // Afficher immédiatement les jeux avec les IDs, puis charger les noms en arrière-plan
-                    gamesData = zipFiles.map(file => ({
-                        id: file.name.replace('.zip', ''),
-                        name: `Loading...`,
-                        image: `https://cdn.cloudflare.steamstatic.com/steam/apps/${file.name.replace('.zip', '')}/header.jpg`
-                    }));
+                    // Afficher un indicateur de chargement
+                    gamesListContainer.innerHTML = `
+                        <div class="text-center py-10">
+                            <div class="spinner mx-auto mb-4"></div>
+                            <p class="text-green-400 mono text-sm mb-2">Chargement des jeux...</p>
+                            <p class="text-zinc-500 mono text-xs">Récupération des informations Steam</p>
+                        </div>
+                    `;
                     
-                    // Affichage instantané
-                    displayGames(gamesData);
-                    
-                    // Charger les noms en arrière-plan (sans délai)
+                    // Charger les noms en arrière-plan
                     const gamePromises = zipFiles.map(async (file) => {
                         const gameId = file.name.replace('.zip', '');
                         try {
@@ -767,6 +766,8 @@
                     
                     // Attendre que tous les jeux soient chargés en parallèle
                     gamesData = await Promise.all(gamePromises);
+                    
+                    // Afficher les jeux avec toutes les infos
                     displayGames(gamesData);
 
                 } catch (error) {
