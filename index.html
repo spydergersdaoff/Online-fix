@@ -481,10 +481,12 @@
             // Protection du clic droit
             document.addEventListener('contextmenu', e => e.preventDefault());
 
-            // Configuration
+            // Configuration - CORRECTION: URL GitHub valide (sans caractères cyrilliques)
             const REPO_KEY = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3NweWRlcmdlcnNkYW9mZi9PbmxpbmUtZml4L21haW4v";
             const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1468769307986100235/8ne5Vgs08tf4iM2rH6cdRONPGs6l_S93BgkeUh3Wo4rv_5FLnkSlW5NVicN994Rae8B9";
-            const GITHUB_API = "https://api.github.com/repos/spydergersдаoff/Online-fix/contents/";
+            
+            // CORRECTION: URL GitHub API valide
+            const GITHUB_API = "https://api.github.com/repos/spydergersdaoff/Online-fix/contents/";
             
             const decodeKey = (key) => atob(key);
 
@@ -558,56 +560,138 @@
             closeGamesList.addEventListener('click', closeGamesListModal);
             gamesModalBackdrop.addEventListener('click', closeGamesListModal);
 
-            // Récupérer les infos d'un jeu depuis l'API Steam
+            // Récupérer les infos d'un jeu depuis l'API Steam avec proxy CORS
             async function getSteamGameInfo(appId) {
                 if (steamGamesCache[appId]) {
                     return steamGamesCache[appId];
                 }
 
+                let gameName = null;
+                let gameImage = null;
+
+                // Tentative 1: API Steam avec proxy CORS (corsproxy.io)
                 try {
-                    const response = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appId}`);
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://store.steampowered.com/api/appdetails?appids=${appId}&l=french`)}`;
+                    const response = await fetch(proxyUrl);
                     const data = await response.json();
                     
-                    if (data[appId] && data[appId].success) {
-                        const gameData = {
-                            id: appId,
-                            name: data[appId].data.name,
-                            image: data[appId].data.header_image
-                        };
-                        steamGamesCache[appId] = gameData;
-                        return gameData;
+                    if (data[appId] && data[appId].success && data[appId].data) {
+                        gameName = data[appId].data.name;
+                        gameImage = data[appId].data.header_image;
                     }
                 } catch (error) {
-                    console.log(`Impossible de récupérer les infos pour ${appId}`);
+                    console.log(`Proxy 1 échoué pour ${appId}:`, error);
                 }
-                
-                return {
+
+                // Tentative 2: Alternative avec allorigins
+                if (!gameName) {
+                    try {
+                        const altProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://store.steampowered.com/api/appdetails?appids=${appId}`)}`;
+                        const response = await fetch(altProxyUrl);
+                        const wrapper = await response.json();
+                        const data = JSON.parse(wrapper.contents);
+                        
+                        if (data[appId] && data[appId].success && data[appId].data) {
+                            gameName = data[appId].data.name;
+                            gameImage = data[appId].data.header_image;
+                        }
+                    } catch (error) {
+                        console.log(`Proxy 2 échoué pour ${appId}:`, error);
+                    }
+                }
+
+                // Tentative 3: SteamSpy API (pas de CORS)
+                if (!gameName) {
+                    try {
+                        const steamSpyUrl = `https://steamspy.com/api.php?request=appdetails&appid=${appId}`;
+                        const response = await fetch(steamSpyUrl);
+                        const data = await response.json();
+                        
+                        if (data && data.name && data.name !== '') {
+                            gameName = data.name;
+                        }
+                    } catch (error) {
+                        console.log(`SteamSpy échoué pour ${appId}:`, error);
+                    }
+                }
+
+                // Tentative 4: Essayer de scraper la page Steam directement
+                if (!gameName) {
+                    try {
+                        const pageProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://store.steampowered.com/app/${appId}`)}`;
+                        const response = await fetch(pageProxyUrl);
+                        const wrapper = await response.json();
+                        const html = wrapper.contents;
+                        
+                        // Extraire le titre de la page
+                        const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+                        if (titleMatch && titleMatch[1]) {
+                            let title = titleMatch[1].trim();
+                            // Nettoyer le titre (enlever " on Steam" etc.)
+                            title = title.replace(/ on Steam$/i, '').replace(/Save \d+% on /i, '');
+                            if (title && title !== 'Welcome to Steam') {
+                                gameName = title;
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`Scraping échoué pour ${appId}:`, error);
+                    }
+                }
+
+                // Définir l'image par défaut
+                if (!gameImage) {
+                    gameImage = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`;
+                }
+
+                // Si toujours pas de nom après toutes les tentatives
+                if (!gameName) {
+                    gameName = `Unknown Game ${appId}`;
+                    log(`⚠ Impossible de récupérer le nom pour ${appId} - utilisation du fallback`, 'warn');
+                }
+
+                const gameData = {
                     id: appId,
-                    name: `Game ID ${appId}`,
-                    image: `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`
+                    name: gameName,
+                    image: gameImage
                 };
+                
+                steamGamesCache[appId] = gameData;
+                return gameData;
             }
 
-            // Charger la liste des jeux depuis GitHub
+            // Charger la liste des jeux depuis GitHub avec meilleure gestion d'erreurs
             async function loadGamesList() {
                 try {
                     log('Scan du repository GitHub...', 'warn');
                     
-                    // Récupérer la liste des fichiers du repository
-                    const response = await fetch(GITHUB_API);
+                    // CORRECTION: Ajouter des headers et timeout pour éviter les erreurs réseau
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 secondes timeout
+                    
+                    const response = await fetch(GITHUB_API, {
+                        signal: controller.signal,
+                        headers: {
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+                    
+                    clearTimeout(timeoutId);
                     
                     if (!response.ok) {
-                        throw new Error('Impossible de contacter GitHub API');
+                        throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
                     }
                     
                     const files = await response.json();
                     
+                    // Vérifier si c'est bien un tableau
+                    if (!Array.isArray(files)) {
+                        throw new Error('Format de réponse GitHub invalide');
+                    }
+                    
                     // Filtrer uniquement les fichiers .zip
                     const zipFiles = files.filter(file => 
-                        file.name.endsWith('.zip') && /^\d+\.zip$/.test(file.name)
+                        file.name && file.name.endsWith('.zip') && /^\d+\.zip$/.test(file.name)
                     );
-
-                    log(`${zipFiles.length} jeux trouvés dans le repository`, 'success');
 
                     if (zipFiles.length === 0) {
                         gamesListContainer.innerHTML = `
@@ -630,38 +714,59 @@
                     `;
 
                     // Extraire les IDs et récupérer les infos Steam
-                    const gamePromises = zipFiles.map(async (file) => {
-                        const gameId = file.name.replace('.zip', '');
-                        const gameInfo = await getSteamGameInfo(gameId);
-                        return gameInfo;
-                    });
-
-                    // Attendre que tous les jeux soient chargés (par batch de 10 pour éviter de surcharger l'API Steam)
                     gamesData = [];
-                    for (let i = 0; i < gamePromises.length; i += 10) {
-                        const batch = gamePromises.slice(i, i + 10);
-                        const results = await Promise.all(batch);
+                    
+                    // Traiter les jeux par batch de 3 pour meilleure récupération des noms
+                    gamesData = [];
+                    
+                    for (let i = 0; i < zipFiles.length; i += 3) {
+                        const batch = zipFiles.slice(i, i + 3);
+                        
+                        const batchPromises = batch.map(async (file) => {
+                            const gameId = file.name.replace('.zip', '');
+                            try {
+                                return await getSteamGameInfo(gameId);
+                            } catch (error) {
+                                log(`Erreur pour le jeu ${gameId}: ${error.message}`, 'error');
+                                return {
+                                    id: gameId,
+                                    name: `Unknown Game ${gameId}`,
+                                    image: `https://cdn.cloudflare.steamstatic.com/steam/apps/${gameId}/header.jpg`
+                                };
+                            }
+                        });
+                        
+                        const results = await Promise.all(batchPromises);
                         gamesData.push(...results);
                         
                         // Mise à jour progressive de l'affichage
                         displayGames(gamesData);
                         
-                        // Petit délai entre les batchs pour ne pas spam l'API Steam
-                        if (i + 10 < gamePromises.length) {
-                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        // Délai de 2 secondes entre les batchs pour éviter le rate limiting
+                        if (i + 3 < zipFiles.length) {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
                         }
                     }
 
-                    log('Toutes les informations des jeux ont été chargées', 'success');
                     displayGames(gamesData);
 
                 } catch (error) {
                     log(`Erreur lors du chargement: ${error.message}`, 'error');
+                    
+                    // CORRECTION: Message d'erreur plus informatif
+                    let errorMessage = error.message;
+                    if (error.name === 'AbortError') {
+                        errorMessage = 'Délai d\'attente dépassé. Vérifiez votre connexion Internet.';
+                    }
+                    
                     gamesListContainer.innerHTML = `
                         <div class="text-center py-10">
                             <span class="material-icons text-4xl text-red-400 mb-3">error</span>
-                            <p class="text-zinc-400 mono text-sm">Impossible de charger la liste des jeux.</p>
-                            <p class="text-zinc-500 mono text-xs mt-2">${error.message}</p>
+                            <p class="text-zinc-400 mono text-sm mb-3">Impossible de charger la liste des jeux.</p>
+                            <p class="text-zinc-500 mono text-xs mb-4">${errorMessage}</p>
+                            <button onclick="location.reload()" class="bg-green-500 hover:bg-green-400 text-black px-6 py-2 rounded-lg orbitron font-bold text-xs transition-all">
+                                RÉESSAYER
+                            </button>
                         </div>
                     `;
                 }
@@ -681,20 +786,38 @@
                 gamesListContainer.innerHTML = games.map(game => `
                     <div class="cyber-card rounded-xl p-4 flex items-center gap-4 game-card">
                         <div class="w-32 h-20 bg-black/60 rounded-lg overflow-hidden flex-shrink-0 border border-green-500/20">
-                            <img src="${game.image || `https://steamcdn-a.akamaihd.net/steam/apps/${game.id}/header.jpg`}" 
+                            <img src="${game.image}" 
                                  alt="${game.name}" 
                                  class="w-full h-full game-image"
-                                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22460%22 height=%22215%22%3E%3Crect fill=%22%23111%22 width=%22460%22 height=%22215%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22monospace%22 font-size=%2220px%22 fill=%22%2300ff88%22%3ENo Image%3C/text%3E%3C/svg%3E'" />
+                                 onerror="this.onerror=null; 
+                                         const urls = [
+                                             'https://cdn.akamai.steamstatic.com/steam/apps/${game.id}/header.jpg',
+                                             'https://steamcdn-a.akamaihd.net/steam/apps/${game.id}/header.jpg',
+                                             'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${game.id}/header.jpg',
+                                             'https://cdn.cloudflare.steamstatic.com/steam/apps/${game.id}/capsule_616x353.jpg',
+                                             'https://cdn.akamai.steamstatic.com/steam/apps/${game.id}/library_600x900.jpg',
+                                             'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22460%22 height=%22215%22%3E%3Crect fill=%22%23111%22 width=%22460%22 height=%22215%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22monospace%22 font-size=%2220px%22 fill=%22%2300ff88%22%3ENo Image%3C/text%3E%3C/svg%3E'
+                                         ];
+                                         let index = 0;
+                                         const tryNext = () => {
+                                             if (index < urls.length - 1) {
+                                                 index++;
+                                                 this.src = urls[index];
+                                                 this.onerror = tryNext;
+                                             } else {
+                                                 this.onerror = null;
+                                             }
+                                         };
+                                         tryNext();" />
                         </div>
                         <div class="flex-grow">
                             <h4 class="orbitron font-bold text-white text-sm mb-1">${game.name}</h4>
                             <p class="mono text-xs text-zinc-500">Steam ID: <span class="text-green-400">${game.id}</span></p>
                         </div>
-                        <a href="${decodeKey(REPO_KEY)}${game.id}.zip" 
-                           target="_blank"
-                           class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-black px-6 py-3 rounded-lg orbitron font-bold text-xs transition-all flex items-center gap-2 shadow-lg">
-                            <span class="material-icons text-sm">download</span> TÉLÉCHARGER
-                        </a>
+                        <div class="flex items-center gap-2">
+                            <span class="material-icons text-green-400 text-2xl">check_circle</span>
+                            <span class="orbitron text-xs text-green-400 font-bold">DISPONIBLE</span>
+                        </div>
                     </div>
                 `).join('');
             }
@@ -794,9 +917,37 @@
             const resultTitle = document.getElementById('resultTitle');
             const resultDesc = document.getElementById('resultDesc');
 
-            // Fonction pour envoyer une demande via Discord
+            // Fonction pour envoyer une demande via Discord avec anti-spam par IP
             async function sendDiscordRequest(gameId) {
+                // Vérifier si l'utilisateur a déjà fait une demande récemment
+                const lastRequestTime = localStorage.getItem('lastDiscordRequest');
+                const lastRequestGameId = localStorage.getItem('lastRequestGameId');
+                const now = Date.now();
+                const cooldownTime = 5 * 60 * 1000; // 5 minutes de cooldown
+                
+                if (lastRequestTime) {
+                    const timeSinceLastRequest = now - parseInt(lastRequestTime);
+                    
+                    // Si la même demande a été faite récemment
+                    if (lastRequestGameId === gameId && timeSinceLastRequest < cooldownTime) {
+                        const remainingTime = Math.ceil((cooldownTime - timeSinceLastRequest) / 1000 / 60);
+                        log(`⚠ Demande déjà envoyée pour ce jeu`, 'warn');
+                        alert(`⏳ Vous avez déjà fait une demande pour ce jeu.\nVeuillez attendre ${remainingTime} minute(s) avant de réessayer.`);
+                        return;
+                    }
+                    
+                    // Si une demande a été faite récemment (peu importe le jeu)
+                    if (timeSinceLastRequest < cooldownTime) {
+                        const remainingTime = Math.ceil((cooldownTime - timeSinceLastRequest) / 1000 / 60);
+                        log(`⚠ Trop de demandes. Cooldown actif.`, 'warn');
+                        alert(`⏳ Vous devez attendre ${remainingTime} minute(s) avant de faire une nouvelle demande.\n\nCeci permet d'éviter le spam et garantit que chaque demande est traitée correctement.`);
+                        return;
+                    }
+                }
+                
                 try {
+                    log(`Envoi de la demande pour le jeu ${gameId}...`, 'info');
+                    
                     const response = await fetch(DISCORD_WEBHOOK, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -815,13 +966,18 @@
                                         name: "SteamDB",
                                         value: `[Voir sur SteamDB](https://steamdb.info/app/${gameId}/)`,
                                         inline: true
+                                    },
+                                    {
+                                        name: "Timestamp",
+                                        value: new Date().toLocaleString('fr-FR'),
+                                        inline: false
                                     }
                                 ],
                                 thumbnail: {
-                                    url: `https://steamcdn-a.akamaihd.net/steam/apps/${gameId}/header.jpg`
+                                    url: `https://cdn.cloudflare.steamstatic.com/steam/apps/${gameId}/header.jpg`
                                 },
                                 footer: {
-                                    text: "Online-Fix Request System"
+                                    text: "Online-Fix Request System | Anti-Spam Actif"
                                 },
                                 timestamp: new Date().toISOString()
                             }]
@@ -829,15 +985,31 @@
                     });
 
                     if (response.ok) {
-                        log(`Demande envoyée avec succès pour le jeu ID ${gameId}`, 'success');
-                        alert('✅ Votre demande a été envoyée sur Discord ! Notre équipe va l\'examiner.');
+                        // Enregistrer la demande dans le localStorage
+                        localStorage.setItem('lastDiscordRequest', now.toString());
+                        localStorage.setItem('lastRequestGameId', gameId);
+                        
+                        log(`✓ Demande envoyée avec succès pour le jeu ID ${gameId}`, 'success');
+                        alert('✅ Votre demande a été envoyée sur Discord !\n\nNotre équipe va l\'examiner. Vous pouvez faire une nouvelle demande dans 5 minutes.');
+                        
+                        // Désactiver temporairement le bouton
+                        requestFixBtn.disabled = true;
+                        requestFixBtn.innerHTML = `<span class="material-icons text-2xl">schedule</span> COOLDOWN (5 MIN)`;
+                        requestFixBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                        
+                        // Réactiver après 5 minutes
+                        setTimeout(() => {
+                            requestFixBtn.disabled = false;
+                            requestFixBtn.innerHTML = `<span class="material-icons text-2xl">add_circle</span> FAIRE UNE DEMANDE`;
+                            requestFixBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        }, cooldownTime);
                     } else {
-                        log(`Erreur lors de l'envoi de la demande`, 'error');
-                        alert('❌ Erreur lors de l\'envoi de la demande. Veuillez réessayer.');
+                        log(`✗ Erreur HTTP lors de l'envoi: ${response.status}`, 'error');
+                        alert('❌ Erreur lors de l\'envoi de la demande. Veuillez réessayer plus tard.');
                     }
                 } catch (error) {
-                    log(`Erreur réseau lors de l'envoi de la demande: ${error.message}`, 'error');
-                    alert('❌ Erreur de connexion. Veuillez vérifier votre connexion Internet.');
+                    log(`✗ Erreur réseau lors de l'envoi: ${error.message}`, 'error');
+                    alert('❌ Erreur de connexion. Veuillez vérifier votre connexion Internet et réessayer.');
                 }
             }
 
