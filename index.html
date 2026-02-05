@@ -157,6 +157,43 @@
         .game-card:hover .game-image {
             transform: scale(1.05);
         }
+
+        .image-loader {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(255, 0, 170, 0.1));
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0, 255, 136, 0.3);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .image-placeholder {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e, #0a0e1a);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
     </style>
 </head>
 <body class="flex flex-col min-h-screen relative">
@@ -767,30 +804,41 @@
 
                 gamesListContainer.innerHTML = games.map(game => `
                     <div class="cyber-card rounded-xl p-4 flex items-center gap-4 game-card">
-                        <div class="w-32 h-20 bg-black/60 rounded-lg overflow-hidden flex-shrink-0 border border-green-500/20">
+                        <div class="w-32 h-20 bg-black/60 rounded-lg overflow-hidden flex-shrink-0 border border-green-500/20 relative">
+                            <div class="image-loader" id="loader-${game.id}">
+                                <div class="spinner"></div>
+                            </div>
                             <img src="${game.image}" 
                                  alt="${game.name}" 
                                  class="w-full h-full game-image"
-                                 onerror="this.onerror=null; 
-                                         const urls = [
-                                             'https://cdn.akamai.steamstatic.com/steam/apps/${game.id}/header.jpg',
-                                             'https://steamcdn-a.akamaihd.net/steam/apps/${game.id}/header.jpg',
-                                             'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${game.id}/header.jpg',
-                                             'https://cdn.cloudflare.steamstatic.com/steam/apps/${game.id}/capsule_616x353.jpg',
-                                             'https://cdn.akamai.steamstatic.com/steam/apps/${game.id}/library_600x900.jpg',
-                                             'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22460%22 height=%22215%22%3E%3Crect fill=%22%23111%22 width=%22460%22 height=%22215%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22monospace%22 font-size=%2220px%22 fill=%22%2300ff88%22%3ENo Image%3C/text%3E%3C/svg%3E'
-                                         ];
-                                         let index = 0;
-                                         const tryNext = () => {
-                                             if (index < urls.length - 1) {
-                                                 index++;
-                                                 this.src = urls[index];
-                                                 this.onerror = tryNext;
-                                             } else {
-                                                 this.onerror = null;
-                                             }
-                                         };
-                                         tryNext();" />
+                                 style="display: none;"
+                                 id="img-${game.id}"
+                                 onload="
+                                     this.style.display = 'block';
+                                     document.getElementById('loader-${game.id}').style.display = 'none';
+                                 "
+                                 onerror="
+                                     const urls = [
+                                         'https://cdn.akamai.steamstatic.com/steam/apps/${game.id}/header.jpg',
+                                         'https://steamcdn-a.akamaihd.net/steam/apps/${game.id}/header.jpg',
+                                         'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${game.id}/header.jpg',
+                                         'https://cdn.cloudflare.steamstatic.com/steam/apps/${game.id}/capsule_616x353.jpg',
+                                         'https://cdn.akamai.steamstatic.com/steam/apps/${game.id}/library_600x900.jpg'
+                                     ];
+                                     if (!this.dataset.urlIndex) this.dataset.urlIndex = '0';
+                                     const index = parseInt(this.dataset.urlIndex);
+                                     if (index < urls.length) {
+                                         this.dataset.urlIndex = (index + 1).toString();
+                                         this.src = urls[index];
+                                     } else {
+                                         document.getElementById('loader-${game.id}').innerHTML = \`
+                                             <div class='image-placeholder'>
+                                                 <span class='material-icons text-3xl text-green-400/50'>sports_esports</span>
+                                                 <span class='mono text-xs text-zinc-500'>ID: ${game.id}</span>
+                                             </div>
+                                         \`;
+                                     }
+                                 " />
                         </div>
                         <div class="flex-grow">
                             <h4 class="orbitron font-bold text-white text-sm mb-1">${game.name}</h4>
