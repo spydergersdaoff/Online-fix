@@ -704,50 +704,32 @@
                         return;
                     }
 
-                    // Afficher un loader pendant le chargement
-                    gamesListContainer.innerHTML = `
-                        <div class="text-center py-10">
-                            <span class="material-icons text-5xl text-green-400 animate-spin mb-4">sync</span>
-                            <p class="text-zinc-400 mono text-sm">Chargement des informations des jeux...</p>
-                            <p class="text-zinc-500 mono text-xs mt-2">${zipFiles.length} jeux détectés</p>
-                        </div>
-                    `;
-
-                    // Extraire les IDs et récupérer les infos Steam
-                    gamesData = [];
+                    // Afficher immédiatement les jeux avec les IDs, puis charger les noms en arrière-plan
+                    gamesData = zipFiles.map(file => ({
+                        id: file.name.replace('.zip', ''),
+                        name: `Loading...`,
+                        image: `https://cdn.cloudflare.steamstatic.com/steam/apps/${file.name.replace('.zip', '')}/header.jpg`
+                    }));
                     
-                    // Traiter les jeux par batch de 3 pour meilleure récupération des noms
-                    gamesData = [];
+                    // Affichage instantané
+                    displayGames(gamesData);
                     
-                    for (let i = 0; i < zipFiles.length; i += 3) {
-                        const batch = zipFiles.slice(i, i + 3);
-                        
-                        const batchPromises = batch.map(async (file) => {
-                            const gameId = file.name.replace('.zip', '');
-                            try {
-                                return await getSteamGameInfo(gameId);
-                            } catch (error) {
-                                log(`Erreur pour le jeu ${gameId}: ${error.message}`, 'error');
-                                return {
-                                    id: gameId,
-                                    name: `Unknown Game ${gameId}`,
-                                    image: `https://cdn.cloudflare.steamstatic.com/steam/apps/${gameId}/header.jpg`
-                                };
-                            }
-                        });
-                        
-                        const results = await Promise.all(batchPromises);
-                        gamesData.push(...results);
-                        
-                        // Mise à jour progressive de l'affichage
-                        displayGames(gamesData);
-                        
-                        // Délai de 2 secondes entre les batchs pour éviter le rate limiting
-                        if (i + 3 < zipFiles.length) {
-                            await new Promise(resolve => setTimeout(resolve, 2000));
+                    // Charger les noms en arrière-plan (sans délai)
+                    const gamePromises = zipFiles.map(async (file) => {
+                        const gameId = file.name.replace('.zip', '');
+                        try {
+                            return await getSteamGameInfo(gameId);
+                        } catch (error) {
+                            return {
+                                id: gameId,
+                                name: `Game ${gameId}`,
+                                image: `https://cdn.cloudflare.steamstatic.com/steam/apps/${gameId}/header.jpg`
+                            };
                         }
-                    }
-
+                    });
+                    
+                    // Attendre que tous les jeux soient chargés en parallèle
+                    gamesData = await Promise.all(gamePromises);
                     displayGames(gamesData);
 
                 } catch (error) {
